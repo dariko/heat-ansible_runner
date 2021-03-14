@@ -44,6 +44,9 @@ parameters:
     image:
         type: string
 
+    hostname:
+        type: string
+
     network:
         type: string
         default: template-os
@@ -94,6 +97,7 @@ resources:
         type: OS::Nova::Server
         properties:
             flavor: {get_param: flavor}
+            name: {get_param: hostname}
             block_device_mapping_v2:
             -   image_id: {get_param: image}
                 delete_on_termination: yes
