@@ -1,0 +1,225 @@
+heat_template_version: 2018-08-31
+
+parameters:
+    ansible_version:
+        type: string
+        default: ""
+
+    inventory:
+        type: string
+        default: |
+            all:
+                vars:
+                    myvar: myvalue
+
+    repo:
+        type: string
+        default: ""
+
+    playbook:
+        type: string
+        default: |
+            -   hosts: localhost
+                tasks:
+                -   debug:
+                        msg:
+                            myvar: "{{myvar}}"
+
+    repo_version:
+        type: string
+        default: latest
+
+    playbook_name:
+        type: string
+        default: site.yml
+
+    flavor:
+        type: string
+        default: sys.2c2r
+
+    image:
+        type: string
+        default: f5ac1965-58ea-41bf-8479-5688dda4f120
+
+    network:
+        type: string
+        default: template-os
+
+    ansible_playbook_args:
+        type: string
+        default: "-e ansible_become=yes -e ansible_user=debian --ssh-common-args='-o StrictHostKeyChecking=no'"
+
+    ssh_key:
+        type: string
+
+    ansible_wait_for_connection:
+        type: boolean
+        default: yes
+
+resources:
+    security_group:
+        type: OS::Neutron::SecurityGroup
+        properties:
+            rules:
+            -   protocol: tcp
+                port_range_min: 22
+                port_range_max: 22
+            -   protocol: icmp
+
+    server:
+        type: OS::Nova::Server
+        properties:
+            user_data_format: SOFTWARE_CONFIG
+            flavor: {get_param: flavor}
+            block_device_mapping_v2:
+            -   image_id: {get_param: image}
+                delete_on_termination: yes
+                volume_size: 10
+            networks:
+            -   network: {get_param: network}
+            security_groups:
+            -   {get_resource: security_group}
+
+    install_ansible_deployment:
+        type: OS::Heat::SoftwareDeployment
+        properties:
+            server: {get_resource: server}
+            config: {get_resource: install_ansible}
+            input_values:
+                version: {get_param: ansible_version}
+
+    prepare_inventory_deployment:
+        depends_on: install_ansible_deployment
+        type: OS::Heat::SoftwareDeployment
+        properties:
+            server: {get_resource: server}
+            config: {get_resource: prepare_inventory}
+            input_values:
+                inventory: {get_param: inventory}
+                private_key: {get_param: ssh_key}
+
+    prepare_repo_deployment:
+        depends_on: install_ansible_deployment
+        type: OS::Heat::SoftwareDeployment
+        properties:
+            server: {get_resource: server}
+            config: {get_resource: prepare_repo}
+            input_values:
+                repo: {get_param: repo}
+                version: {get_param: repo_version}
+                playbook: {get_param: playbook}
+                playbook_name: {get_param: playbook_name}
+
+    ansible_playbook_deployment:
+        depends_on:
+        -   install_ansible_deployment
+        type: OS::Heat::SoftwareDeployment
+        properties:
+            server: {get_resource: server}
+            config: {get_resource: ansible_playbook}
+            input_values:
+                playbook_name: {get_param: playbook_name}
+                ansible_playbook_args: {get_param: ansible_playbook_args}
+                _notify:
+                -   {get_attr: [prepare_inventory_deployment, uuid]}
+                -   {get_attr: [prepare_repo_deployment, uuid]}
+
+    ansible_playbook:
+        type: OS::Heat::SoftwareConfig
+        properties:
+            group: script
+            inputs:
+            -   name: playbook_name
+            -   name: ansible_playbook_args
+            -   name: ansible_playbook_wait_connection
+            config: |
+                #!/usr/bin/bash
+                set -e
+                
+                cd /repo
+                env
+                ansible "$ansible_playbook_args" -i /inventory -m wait_for_connection all
+                ansible-playbook "$ansible_playbook_args" -i /inventory $playbook_name | tee /var/log/ansible.log
+
+    install_ansible:
+        type: OS::Heat::SoftwareConfig
+        properties:
+            group: script
+            inputs:
+            -   name: ansible_version
+            config: |
+                #!/usr/bin/bash
+                set -e
+                
+                apt install python3 python3-pip
+                pip3 install setuptools
+                pip3 install ansible$ansible_version
+
+    prepare_repo:
+        type: OS::Heat::SoftwareConfig
+        properties:
+            group: script
+            inputs:
+            -   name: repo
+            -   name: repo_version
+            -   name: playbook
+            -   name: playbook_name
+            outputs:
+            -   name: uuid
+            config: |
+                #!/usr/bin/bash
+                set -e
+                
+                rm -rf /repo
+                if ! [ -z "$repo" ]; then
+                    git clone "$repo" /repo
+                    cd /repo
+                    git checkout -b ansible_local "$repo_version"
+                    git rev-parse HEAD > $heat_outputs_path.hash
+                else
+                    mkdir -p /repo
+                    echo "$playbook" > "/repo/$playbook_name"
+                fi
+                
+                python -c "import uuid;print str(uuid.uuid4())" > $heat_outputs_path.uuid
+
+    prepare_inventory:
+        type: OS::Heat::SoftwareConfig
+        properties:
+            group: script
+            inputs:
+            -   name: inventory
+            -   name: private_key
+            outputs:
+            -   name: uuid
+            config: |
+                #!/usr/bin/bash
+                set -e
+                
+                mkdir -p /root/.ssh
+                cat > /root/.ssh/id_rsa <<EOF
+                $private_key
+                EOF
+                chmod 600 /root/.ssh/id_rsa
+                
+                cat > /inventory <<EOF
+                $inventory
+                EOF
+                
+                python -c "import uuid;print str(uuid.uuid4())" > $heat_outputs_path.uuid
+
+outputs:
+    playbook_stdout:
+        value:
+            get_attr:
+            -   ansible_playbook_deployment
+            -   deploy_stdout
+    playbook_stderr:
+        value:
+            get_attr:
+            -   ansible_playbook_deployment
+            -   deploy_stderr
+    security_group:
+        value:
+            get_attr:
+            -   security_group
