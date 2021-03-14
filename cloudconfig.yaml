@@ -43,7 +43,6 @@ parameters:
 
     image:
         type: string
-        default: debian_10-2021-02-14
 
     network:
         type: string
