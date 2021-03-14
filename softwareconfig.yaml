@@ -39,7 +39,6 @@ parameters:
 
     image:
         type: string
-        default: f5ac1965-58ea-41bf-8479-5688dda4f120
 
     network:
         type: string
