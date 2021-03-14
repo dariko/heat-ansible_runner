@@ -1,0 +1,200 @@
+heat_template_version: 2018-08-31
+
+parameters:
+    ansible_version:
+        type: string
+        default: ""
+
+    inventory:
+        type: string
+        default: |
+            all:
+                vars:
+                    myvar: myvalue
+
+    playbook:
+        type: string
+        default: |
+            -   hosts: localhost
+                tasks:
+                -   debug:
+                        msg:
+                            myvar: "{{myvar}}"
+
+    groups:
+        type: json
+        default: []
+
+    repository_url:
+        type: string
+        default: ""
+
+    repository_version:
+        type: string
+        default: master
+
+    playbook_name:
+        type: string
+        default: /playbook.yml
+
+    flavor:
+        type: string
+        default: sys.2c2r
+
+    image:
+        type: string
+        default: debian_10-2021-02-14
+
+    network:
+        type: string
+        default: template-os
+
+    ansible_playbook_args:
+        type: string
+        default: "-e ansible_become=yes -e ansible_user=debian --ssh-common-args='-o StrictHostKeyChecking=no'"
+
+    ssh_key:
+        type: string
+
+    ansible_wait_for_connection:
+        type: boolean
+        default: yes
+
+    cache_type:
+        type: string
+        default: ceph
+
+    requirements_txt:
+        type: string
+        default: requirements.txt
+
+resources:
+    cache_volume:
+        type: OS::Cinder::Volume
+        properties:
+            volume_type: {get_param: cache_type}
+            size: 10
+
+    security_group:
+        type: OS::Neutron::SecurityGroup
+        properties:
+            rules:
+            -   protocol: tcp
+                port_range_min: 22
+                port_range_max: 22
+            -   protocol: icmp
+
+    port:
+        type: OS::Neutron::Port
+        properties:
+            network: {get_param: network}
+            security_groups:
+            -   {get_resource: security_group}
+
+    server:
+        type: OS::Nova::Server
+        properties:
+            flavor: {get_param: flavor}
+            block_device_mapping_v2:
+            -   image_id: {get_param: image}
+                delete_on_termination: yes
+                volume_size: 10
+            networks:
+            -   port: {get_resource: port}
+            user_data_format: RAW
+            user_data: {get_resource: write_inventory_and_playbook}
+
+    cache_volume_attachment:
+        type: OS::Cinder::VolumeAttachment
+        properties:
+            instance_uuid: {get_resource: server}
+            volume_id: {get_resource: cache_volume}
+            mountpoint: /dev/vdb
+
+    ansible_run:
+        type: OS::Heat::Value
+        properties:
+            value:
+                str_replace:
+                    params:
+                        $ansible_version: {get_param: ansible_version}
+                        $repository_url: {get_param: repository_url}
+                        $repository_version: {get_param: repository_version}
+                        $playbook_args: {get_param: ansible_playbook_args}
+                        $playbook_name: {get_param: playbook_name}
+                        $ansible_wait_for_connection: {get_param: ansible_wait_for_connection}
+                        $ssh_key: {get_param: ssh_key}
+                        $requirements_txt: {get_param: requirements_txt}
+                    template: |
+                        #!/bin/bash
+                        set -x
+                        set -e
+                        
+                        mkdir -p /root/.ssh
+                        chmod 700 /root/.ssh
+                        echo "$ssh_key" > /root/.ssh/id_rsa
+                        chmod 600 /root/.ssh/id_rsa
+                        
+                        while ! [ -b /dev/vdb ]; do echo "waiting for vdb"; sleep 1;done
+                        blkid -o full /dev/vdb | grep ext4 || mkfs.ext4 /dev/vdb
+                        if ! [ -d /cache/ ]; then mkdir /cache; fi
+                        if ! grep ^/dev/vdb /etc/mtab; then mount /dev/vdb /cache; fi
+                        
+                        apt update
+                        apt install -y python3 python3-pip git virtualenv
+                        virtualenv -p python3 /cache/venv || true
+                        . /cache/venv/bin/activate
+                        pip3 install ansible$ansible_version
+                        
+                        cd /cache
+                        if ! [ -z "$repository_url" ]; then
+                            ansible-playbook -i localhost, /prepare_local_repository.yml
+                            cd /cache/repo
+                            if ! [ -z "$requirements_txt" ] && [ -e $requirements_txt ]; then
+                                pip install -r $requirements_txt
+                            fi
+                        fi
+                        
+                        if [ "$ansible_wait_for_connection" = "True" ]; then
+                            ansible $playbook_args -i /inventory -m wait_for_connection all,localhost
+                        fi
+                        ansible-playbook $playbook_args -i /inventory "$playbook_name"
+
+    prepare_local_repository:
+        type: OS::Heat::Value
+        properties:
+            value:
+                str_replace:
+                    params:
+                        $repository_url: {get_param: repository_url}
+                        $repository_version: {get_param: repository_version}
+                    template: |
+                        -   hosts: localhost
+                            connection: local
+                            gather_facts: no
+                            tasks:
+                            -   when: |
+                                    "$repository_url" != ""
+                                git:
+                                    repo: "$repository_url"
+                                    version: "$repository_version"
+                                    dest: /cache/repo/
+
+    write_inventory_and_playbook:
+        type: OS::Heat::CloudConfig
+        properties:
+            cloud_config:
+                write_files:
+                -   path: /inventory
+                    content: {get_param: inventory}
+                -   path: /playbook.yml
+                    content: {get_param: playbook}
+                -   path: /run_script
+                    content: {get_attr: [ansible_run, value]}
+                -   path: /prepare_local_repository.yml
+                    content: {get_attr: [prepare_local_repository, value]}
+                -   path: /inventory_groups.json
+                    content: "{get_param: groups}"
+                runcmd:
+                -   chmod +x /run_script
+                -   /run_script
