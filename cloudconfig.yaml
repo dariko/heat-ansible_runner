@@ -37,6 +37,10 @@ parameters:
         type: string
         default: /playbook.yml
 
+    inventory_path:
+        type: string
+        default: inventory/
+
     flavor:
         type: string
         default: sys.2c2r
@@ -128,6 +132,7 @@ resources:
                         $ansible_wait_for_connection: {get_param: ansible_wait_for_connection}
                         $ssh_key: {get_param: ssh_key}
                         $requirements_txt: {get_param: requirements_txt}
+                        $inventory_path: {get_param: inventory_path}
                     template: |
                         #!/bin/bash
                         set -x
@@ -159,9 +164,9 @@ resources:
                         fi
                         
                         if [ "$ansible_wait_for_connection" = "True" ]; then
-                            ansible $playbook_args -i /inventory -m wait_for_connection all,localhost
+                            ansible $playbook_args -i /inventory -i $inventory_path -m wait_for_connection all,localhost
                         fi
-                        ansible-playbook $playbook_args -i /inventory "$playbook_name"
+                        ansible-playbook $playbook_args -i /inventory -i $inventory_path "$playbook_name"
 
     prepare_local_repository:
         type: OS::Heat::Value
