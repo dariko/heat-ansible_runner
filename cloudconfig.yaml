@@ -218,10 +218,12 @@ resources:
 outputs:
     test:
         value:
-            repeat:
-                for_each:
-                    $inventory_path:
-                        list_concat:
-                        -   -   /inventory
-                        -   {get_param: inventory_paths}
-                template: "-i $inventory_path"
+            list_join:
+            -   " "
+            -   repeat:
+                    for_each:
+                        $inventory_path:
+                            list_concat:
+                            -   -   /inventory
+                            -   {get_param: inventory_paths}
+                    template: "-i $inventory_path"
