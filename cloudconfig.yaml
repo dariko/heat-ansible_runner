@@ -140,7 +140,7 @@ resources:
                                         <%item%>:
                                             list_concat:
                                             -   -   /inventory
-                                            -   inventory_paths
+                                            -   {get_param: inventory_paths}
                                     template:
                                         -   "-i <%item%>"
                     template: |
