@@ -23,6 +23,7 @@ parameters:
         description: >
             The content of this variable will be written in /playbook.yml.
         type: string
+        default: ""
 
     playbook_name:
         description: >
