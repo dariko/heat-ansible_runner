@@ -132,17 +132,16 @@ resources:
                         $ansible_wait_for_connection: {get_param: ansible_wait_for_connection}
                         $ssh_key: {get_param: ssh_key}
                         $requirements_txt: {get_param: requirements_txt}
-                        $inventory_path:
+                        $inventory_param:
                             list_join:
                             -   " "
                             -   repeat:
                                     for_each:
-                                        <%item%>:
+                                        $inventory_path:
                                             list_concat:
                                             -   -   /inventory
                                             -   {get_param: inventory_paths}
-                                    template:
-                                        -   "-i <%item%>"
+                                    template: "-i $inventory_path"
                     template: |
                         #!/bin/bash
                         set -x
@@ -176,7 +175,7 @@ resources:
                         if [ "$ansible_wait_for_connection" = "True" ]; then
                             ansible $playbook_args -i /inventory -i $inventory_path -m wait_for_connection all,localhost
                         fi
-                        ansible-playbook $playbook_args -i /inventory -i $inventory_path "$playbook_name"
+                        ansible-playbook $playbook_args $inventory_param "$playbook_name"
 
     prepare_local_repository:
         type: OS::Heat::Value
