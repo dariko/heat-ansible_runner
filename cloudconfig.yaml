@@ -217,4 +217,14 @@ resources:
 
 outputs:
     test:
-        value: {get_param: inventory_paths}
+        value: 
+            list_join:
+            -   " "
+            -   repeat:
+                    for_each:
+                        <%item%>:
+                            list_merge:
+                            -   -   /inventory
+                            -   {get_param: inventory_paths}
+                    template:
+                        -   "-i <%item%>"
