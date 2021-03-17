@@ -224,5 +224,4 @@ outputs:
                         list_concat:
                         -   -   /inventory
                         -   {get_param: inventory_paths}
-                template:
-                    -   $inventory_path
+                template: "-i $inventory_path"
