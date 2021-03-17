@@ -16,7 +16,7 @@ parameters:
         description: >
             These paths (and `/inventory`) will be used by ansible as
             inventories.
-        type: comma_delimited_list
+        type: json
 
     playbook:
         description: >
@@ -37,10 +37,6 @@ parameters:
     repository_version:
         type: string
         default: master
-
-    inventory_path:
-        type: string
-        default: inventory/
 
     flavor:
         type: string
@@ -205,3 +201,7 @@ resources:
                 runcmd:
                 -   chmod +x /run_script
                 -   /run_script
+
+outputs:
+    test:
+        value: {get_param: inventory_paths}
