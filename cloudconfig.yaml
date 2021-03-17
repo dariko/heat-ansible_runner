@@ -217,11 +217,12 @@ resources:
 
 outputs:
     test:
-        value: 
-            for_each:
-                $inventory_path:
-                    list_concat:
-                    -   -   /inventory
-                    -   {get_param: inventory_paths}
-            template:
-                -   $inventory_path
+        value:
+            repea:
+                for_each:
+                    $inventory_path:
+                        list_concat:
+                        -   -   /inventory
+                        -   {get_param: inventory_paths}
+                template:
+                    -   $inventory_path
