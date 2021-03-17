@@ -223,7 +223,7 @@ outputs:
             -   repeat:
                     for_each:
                         <%item%>:
-                            list_merge:
+                            list_concat:
                             -   -   /inventory
                             -   {get_param: inventory_paths}
                     template:
