@@ -17,6 +17,7 @@ parameters:
             These paths (and `/inventory`) will be used by ansible as
             inventories.
         type: json
+        default: []
 
     playbook:
         description: >
