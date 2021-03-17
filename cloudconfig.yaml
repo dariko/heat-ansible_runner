@@ -131,7 +131,7 @@ resources:
                         $ansible_wait_for_connection: {get_param: ansible_wait_for_connection}
                         $ssh_key: {get_param: ssh_key}
                         $requirements_txt: {get_param: requirements_txt}
-                        $inventory_path: {get_param: inventory_path}
+                        $inventory_path: /dev/null
                     template: |
                         #!/bin/bash
                         set -x
