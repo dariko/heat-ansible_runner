@@ -218,7 +218,7 @@ resources:
 outputs:
     test:
         value:
-            repea:
+            repeat:
                 for_each:
                     $inventory_path:
                         list_concat:
