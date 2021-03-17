@@ -6,24 +6,32 @@ parameters:
         default: ""
 
     inventory:
+        description: >
+            The content of this variable will be written in /inventory
+            and used by ansible.
         type: string
-        default: |
-            all:
-                vars:
-                    myvar: myvalue
+        default: ""
+
+    inventory_paths:
+        description: >
+            These paths (and `/inventory`) will be used by ansible as
+            inventories.
+        type: json
+        default:
+        -   /dev/null
 
     playbook:
+        description: >
+            The content of this variable will be written in /playbook.yml.
         type: string
-        default: |
-            -   hosts: localhost
-                tasks:
-                -   debug:
-                        msg:
-                            myvar: "{{myvar}}"
+        default: ""
 
-    groups:
-        type: json
-        default: []
+    playbook_name:
+        description: >
+            The path (possibly relative to the repository url) of the
+            playbook which will be executed.
+        type: string
+        default: /playbook.yml
 
     repository_url:
         type: string
@@ -32,14 +40,6 @@ parameters:
     repository_version:
         type: string
         default: master
-
-    playbook_name:
-        type: string
-        default: /playbook.yml
-
-    inventory_path:
-        type: string
-        default: inventory/
 
     flavor:
         type: string
@@ -132,7 +132,16 @@ resources:
                         $ansible_wait_for_connection: {get_param: ansible_wait_for_connection}
                         $ssh_key: {get_param: ssh_key}
                         $requirements_txt: {get_param: requirements_txt}
-                        $inventory_path: {get_param: inventory_path}
+                        $inventory_param:
+                            list_join:
+                            -   " "
+                            -   repeat:
+                                    for_each:
+                                        $inventory_path:
+                                            list_concat:
+                                            -   -   /inventory
+                                            -   {get_param: inventory_paths}
+                                    template: "-i $inventory_path"
                     template: |
                         #!/bin/bash
                         set -x
@@ -164,9 +173,9 @@ resources:
                         fi
                         
                         if [ "$ansible_wait_for_connection" = "True" ]; then
-                            ansible $playbook_args -i /inventory -i $inventory_path -m wait_for_connection all,localhost
+                            ansible $playbook_args $inventory_param -m wait_for_connection all,localhost
                         fi
-                        ansible-playbook $playbook_args -i /inventory -i $inventory_path "$playbook_name"
+                        ansible-playbook $playbook_args $inventory_param "$playbook_name"
 
     prepare_local_repository:
         type: OS::Heat::Value
@@ -201,8 +210,19 @@ resources:
                     content: {get_attr: [ansible_run, value]}
                 -   path: /prepare_local_repository.yml
                     content: {get_attr: [prepare_local_repository, value]}
-                -   path: /inventory_groups.json
-                    content: "{get_param: groups}"
                 runcmd:
                 -   chmod +x /run_script
                 -   /run_script
+
+outputs:
+    test:
+        value:
+            list_join:
+            -   " "
+            -   repeat:
+                    for_each:
+                        $inventory_path:
+                            list_concat:
+                            -   -   /inventory
+                            -   {get_param: inventory_paths}
+                    template: "-i $inventory_path"
