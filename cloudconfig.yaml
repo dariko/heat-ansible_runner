@@ -6,24 +6,29 @@ parameters:
         default: ""
 
     inventory:
+        description: >
+            The content of this variable will be written in /inventory
+            and used by ansible.
         type: string
-        default: |
-            all:
-                vars:
-                    myvar: myvalue
+        default: ""
+
+    inventory_paths:
+        description: >
+            These paths (and `/inventory`) will be used by ansible as
+            inventories.
+        type: comma_delimited_list
 
     playbook:
+        description: >
+            The content of this variable will be written in /playbook.yml.
         type: string
-        default: |
-            -   hosts: localhost
-                tasks:
-                -   debug:
-                        msg:
-                            myvar: "{{myvar}}"
 
-    groups:
-        type: json
-        default: []
+    playbook_name:
+        description: >
+            The path (possibly relative to the repository url) of the
+            playbook which will be executed.
+        type: string
+        default: /playbook.yml
 
     repository_url:
         type: string
@@ -32,10 +37,6 @@ parameters:
     repository_version:
         type: string
         default: master
-
-    playbook_name:
-        type: string
-        default: /playbook.yml
 
     inventory_path:
         type: string
@@ -201,8 +202,6 @@ resources:
                     content: {get_attr: [ansible_run, value]}
                 -   path: /prepare_local_repository.yml
                     content: {get_attr: [prepare_local_repository, value]}
-                -   path: /inventory_groups.json
-                    content: "{get_param: groups}"
                 runcmd:
                 -   chmod +x /run_script
                 -   /run_script
