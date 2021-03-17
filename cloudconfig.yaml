@@ -17,7 +17,8 @@ parameters:
             These paths (and `/inventory`) will be used by ansible as
             inventories.
         type: json
-        default: []
+        default:
+        -   /dev/null
 
     playbook:
         description: >
@@ -131,7 +132,17 @@ resources:
                         $ansible_wait_for_connection: {get_param: ansible_wait_for_connection}
                         $ssh_key: {get_param: ssh_key}
                         $requirements_txt: {get_param: requirements_txt}
-                        $inventory_path: /dev/null
+                        $inventory_path:
+                            list_join:
+                            -   " "
+                            -   repeat:
+                                    for_each:
+                                        <%item%>:
+                                            list_concat:
+                                            -   -   /inventory
+                                            -   inventory_paths
+                                    template:
+                                        -   "-i <%item%>"
                     template: |
                         #!/bin/bash
                         set -x
