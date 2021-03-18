@@ -33,6 +33,13 @@ parameters:
         type: string
         default: /playbook.yml
 
+    cache_volume_path:
+        description: >
+            The path of the block device used to cache repository and
+            virtualenv
+        type: string
+        default: /dev/sdb
+
     repository_url:
         type: string
         default: ""
@@ -116,7 +123,6 @@ resources:
         properties:
             instance_uuid: {get_resource: server}
             volume_id: {get_resource: cache_volume}
-            mountpoint: /dev/vdb
 
     ansible_run:
         type: OS::Heat::Value
@@ -132,6 +138,7 @@ resources:
                         $ansible_wait_for_connection: {get_param: ansible_wait_for_connection}
                         $ssh_key: {get_param: ssh_key}
                         $requirements_txt: {get_param: requirements_txt}
+                        $cache_volume_path: {get_param: cache_volume_path}
                         $inventory_param:
                             list_join:
                             -   " "
@@ -152,10 +159,18 @@ resources:
                         echo "$ssh_key" > /root/.ssh/id_rsa
                         chmod 600 /root/.ssh/id_rsa
                         
-                        while ! [ -b /dev/vdb ]; do echo "waiting for vdb"; sleep 1;done
-                        blkid -o full /dev/vdb | grep ext4 || mkfs.ext4 /dev/vdb
+                        while ! [ -b $cache_volume_path ]; do echo "waiting for $cache_volume_path"; sleep 1;done
+                        blkid -o full $cache_volume_path | grep ext4 || mkfs.ext4 "$cache_volume_path"
                         if ! [ -d /cache/ ]; then mkdir /cache; fi
-                        if ! grep ^/dev/vdb /etc/mtab; then mount /dev/vdb /cache; fi
+                        
+                        if ! grep "^$cache_volume_path" /etc/mtab; then
+                        cat >> /etc/fstab <<EOF
+                        #ansible_runner
+                        $cache_volume_path /cache ext4 auto,defaults 0 0
+                        #end ansible runner
+                        EOF
+                        mount /cache
+                        fi
                         
                         apt update
                         apt install -y python3 python3-pip git virtualenv
