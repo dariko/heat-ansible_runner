@@ -128,7 +128,7 @@ resources:
             instance_uuid: {get_resource: server}
             volume_id: {get_resource: cache_volume}
 
-    ansible_run:
+    ansible_runner_script:
         type: OS::Heat::Value
         properties:
             value:
@@ -216,6 +216,22 @@ resources:
                                     repo: "$repository_url"
                                     version: "$repository_version"
                                     dest: /cache/repo/
+                                    force: $repository_force
+
+    systemd_unit:
+        type: OS::Heat::Value
+        properties:
+            value: |
+                [Unit]
+                Description=Ansible runner
+                After=network-online.target
+                Wants=network-online.target
+                [Service]
+                Type=OneShot
+                RemainAfterExit=True
+                ExecStart=/usr/local/bin/ansible_runner
+                [Install]
+                WantedBy=multi-user.target
 
     write_inventory_and_playbook:
         type: OS::Heat::CloudConfig
@@ -226,13 +242,17 @@ resources:
                     content: {get_param: inventory}
                 -   path: /playbook.yml
                     content: {get_param: playbook}
-                -   path: /run_script
-                    content: {get_attr: [ansible_run, value]}
+                -   path: /usr/local/bin/ansible_runner
+                    content: {get_attr: [ansible_runner_script, value]}
+                    permissions: '0755'
                 -   path: /prepare_local_repository.yml
                     content: {get_attr: [prepare_local_repository, value]}
+                -   path: /etc/systemd/systemd/ansible_runner.service
+                    content: {get_attr: [systemd_unit, value]}
                 runcmd:
-                -   chmod +x /run_script
-                -   /run_script
+                -   systemctl daemon-reload
+                -   systemctl enable ansible_runner
+                -   systemctl start ansible_runner
 
 outputs:
     test:
