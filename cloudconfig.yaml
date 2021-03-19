@@ -48,6 +48,10 @@ parameters:
         type: string
         default: master
 
+    repository_force:
+        type: boolean
+        default: yes
+
     flavor:
         type: string
         default: sys.2c2r
@@ -200,6 +204,7 @@ resources:
                     params:
                         $repository_url: {get_param: repository_url}
                         $repository_version: {get_param: repository_version}
+                        $repository_force: {get_param: repository_force}
                     template: |
                         -   hosts: localhost
                             connection: local
