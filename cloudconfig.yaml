@@ -247,7 +247,7 @@ resources:
                     permissions: '0755'
                 -   path: /prepare_local_repository.yml
                     content: {get_attr: [prepare_local_repository, value]}
-                -   path: /etc/systemd/systemd/ansible_runner.service
+                -   path: /etc/systemd/system/ansible_runner.service
                     content: {get_attr: [systemd_unit, value]}
                 runcmd:
                 -   systemctl daemon-reload
